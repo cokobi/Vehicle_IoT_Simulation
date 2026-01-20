@@ -1,0 +1,7 @@
+pyspark==3.5.0
+kafka-python
+minio
+boto3
+pandas
+pyarrow
+delta-spark

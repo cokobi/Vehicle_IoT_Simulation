@@ -1,0 +1,16 @@
+# ignore system folders
+__pycache__/
+*.pyc
+.DS_Store
+.env
+
+# ignore data
+data/
+
+# keep notebooks local (for sandnboxing)
+notebooks/
+.ipynb_checkpoints/
+
+# ignore airflow logs
+logs/
+plugins/

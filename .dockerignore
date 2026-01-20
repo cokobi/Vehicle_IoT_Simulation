@@ -1,0 +1,16 @@
+# ignore data
+data/
+
+# ignore git history
+.git/
+
+# keep notebooks local (for sandnboxing)
+notebooks/
+.ipynb_checkpoints/
+
+# ignore python temp files
+__pycache__/
+*.pyc
+
+# ignore vscode settings
+.vscode/

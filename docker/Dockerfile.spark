@@ -1,0 +1,14 @@
+FROM apache/spark:3.5.0-python3
+
+# use user root for enabling installations (we need admin permissions)
+USER root
+
+# install python libraries
+# we copy requirements.txt from local folder into /app folder inside the image
+COPY requirements.txt /app/requirements.txt
+RUN pip install -r /app/requirements.txt
+
+# after installations are done we go back to the default user 
+# 185 is the default UID for spark
+
+USER 185
