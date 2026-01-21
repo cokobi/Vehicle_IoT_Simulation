@@ -21,6 +21,10 @@ def print_batch(df, epoch_id):
     # print("\033[H\033[J", end="") 
     
     print(f"--- Alert Report | Batch: {epoch_id} ---")
+    row = df.first()
+    window_start = row["window"]["start"]
+    print(f"Window Time: {window_start}")
+    print("-" * 30)
 
     # Check if DataFrame is empty
     row_count = df.count()
@@ -32,7 +36,16 @@ def print_batch(df, epoch_id):
         return
     
     clean_df = df.withColumn("window", col("window.start").cast("string")) \
-                 .select("window", "brand_name", "num_of_rows", "maximum_speed", "num_of_black")
+                 .select(
+                        # "window", 
+                         "num_of_rows", 
+                         "num_of_black", 
+                         "num_of_white", 
+                         "num_of_silver",
+                         "maximum_speed", 
+                         "maximum_gear",
+                         "maximum_rpm"
+                         )
 
     # Print the DataFrame to the console without truncating values
     clean_df.show(truncate=False)
@@ -42,7 +55,7 @@ def run_counter_service():
     spark = get_spark_session("AlertCounterService")
 
     # Reduce log verbosity for cleaner console output
-    spark.sparkContext.setLogLevel("WARN")
+    spark.sparkContext.setLogLevel("ERROR")
 
     # Read Stream from 'alert-data' topic
     alerts_stream = spark.readStream \
@@ -67,7 +80,7 @@ def run_counter_service():
         .withWatermark("event_time", "30 seconds") \
         .groupBy(
             window(col("event_time"), "10 minutes"),
-            col("brand_name")
+            # col("brand_name")
         ) \
         .agg(
             count("*").alias("num_of_rows"),
@@ -85,6 +98,7 @@ def run_counter_service():
     query = counts_df \
         .writeStream \
         .outputMode("update") \
+        .trigger(processingTime='10 minutes') \
         .foreachBatch(print_batch) \
         .start()
 
