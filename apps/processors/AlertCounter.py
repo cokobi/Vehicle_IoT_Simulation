@@ -78,6 +78,7 @@ def run_counter_service():
     # Window: 10 minutes
     # Metrics: Count Total, Count Colors, Max values
 
+    # set watermark to handle late data
     counts_df = parsed_alerts \
         .withWatermark("event_time", "30 seconds") \
         .groupBy(
@@ -99,7 +100,7 @@ def run_counter_service():
 
     query = counts_df \
         .writeStream \
-        .outputMode("update") \
+        .outputMode("append") \
         .trigger(processingTime='10 minutes') \
         .foreachBatch(print_batch) \
         .start()
