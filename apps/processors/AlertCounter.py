@@ -21,11 +21,7 @@ def print_batch(df, epoch_id):
     # print("\033[H\033[J", end="") 
     
     print(f"--- Alert Report | Batch: {epoch_id} ---")
-    row = df.first()
-    window_start = row["window"]["start"]
-    print(f"Window Time: {window_start}")
-    print("-" * 30)
-
+    
     # Check if DataFrame is empty
     row_count = df.count()
     if row_count == 0:
@@ -35,9 +31,15 @@ def print_batch(df, epoch_id):
         print("  2. Is Detector running? (Terminal 2)")
         return
     
-    clean_df = df.withColumn("window", col("window.start").cast("string")) \
-                 .select(
-                        # "window", 
+    # Get the latest window only
+    latest_window_row = df.orderBy(col("window.start").desc()).limit(1)
+
+    row = latest_window_row.first()
+    window_start = row["window"]["start"]
+    print(f"Window Time: {window_start}")
+    print("-" * 30)
+
+    clean_df = latest_window_row.select(
                          "num_of_rows", 
                          "num_of_black", 
                          "num_of_white", 
