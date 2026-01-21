@@ -20,30 +20,3 @@ CARS_INVENTORY = 20
 DATA_GENERATOR_TOPIC = "sensors-sample"
 DATA_ENRICHMENT_TOPIC = "samples-enriched"
 ALERT_TOPIC = "alert-data"
-
-# 5. Initiator function for Kafka-Spark Topics
-def initialize_kafka_topics(spark):
-    """
-    Sends a dummy message to all required Kafka topics to ensure they are created.
-    This prevents 'UnknownTopicOrPartitionException' for the consumers.
-    """
-    print("Initializing Kafka Topics")
-
-    topics_to_create = [
-        DATA_GENERATOR_TOPIC,  
-        DATA_ENRICHMENT_TOPIC, 
-        ALERT_TOPIC            
-    ]
-
-    for topic in topics_to_create:
-        try:
-            # create temporary df with a single message
-            df = spark.createDataFrame([("init_topic",)], ["value"])
-            df.write \
-                .format("kafka") \
-                .option("kafka.bootstrap.servers", "kafka:9092") \
-                .option("topic", topic) \
-                .save()
-            print(f"Topic '{topic}' is ready.")  
-        except Exception as e:
-            print(f"Warning: Could not initialize topic '{topic}'. Error: {e}")

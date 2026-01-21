@@ -18,23 +18,38 @@ def print_batch(df, epoch_id):
     creating a 'Dashboard' effect.
     """
     # ANSI escape code to clear the terminal screen (works in Docker/Linux)
-    print("\033[H\033[J", end="") 
+    # print("\033[H\033[J", end="") 
     
     print(f"--- Alert Report | Batch: {epoch_id} ---")
+
+    # Check if DataFrame is empty
+    row_count = df.count()
+    if row_count == 0:
+        print("Waiting for data...")
+        print("Check list:")
+        print("  1. Is Producer running? (Terminal 4)")
+        print("  2. Is Detector running? (Terminal 2)")
+        return
     
+    clean_df = df.withColumn("window", col("window.start").cast("string")) \
+                 .select("window", "brand_name", "num_of_rows", "maximum_speed", "num_of_black")
+
     # Print the DataFrame to the console without truncating values
-    df.show(truncate=False)
+    clean_df.show(truncate=False)
 
 def run_counter_service():
     print("Starting Alert Counter Service (Console Output)...")
     spark = get_spark_session("AlertCounterService")
+
+    # Reduce log verbosity for cleaner console output
+    spark.sparkContext.setLogLevel("WARN")
 
     # Read Stream from 'alert-data' topic
     alerts_stream = spark.readStream \
         .format("kafka") \
         .option("kafka.bootstrap.servers", "kafka:9092") \
         .option("subscribe", config.ALERT_TOPIC) \
-        .option("startingOffsets", "latest") \
+        .option("startingOffsets", "earliest") \
         .load()
 
     # Parse JSON (Using Enriched Schema because the data structure hasn't changed)
@@ -71,7 +86,6 @@ def run_counter_service():
         .writeStream \
         .outputMode("update") \
         .foreachBatch(print_batch) \
-        .trigger(processingTime='5 seconds') \
         .start()
 
     query.awaitTermination()

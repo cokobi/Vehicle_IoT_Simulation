@@ -20,6 +20,15 @@ The system is built as a pipeline of decoupled services:
 
 ### Prerequisites
 * Docker & Docker Compose installed.
+* Create .env file in the project's folder with the following settings:
+# MinIO Configuration (Cahnge according to your credentioals)
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=minioadmin
+
+# Spark S3 Configuration (Cahnge according to your credentioals)
+AWS_ACCESS_KEY_ID=minioadmin
+AWS_SECRET_ACCESS_KEY=minioadmin
+AWS_ENDPOINT_URL=http://minio:9000
 
 ### Step 1: Start Infrastructure
 Start the Kafka, Spark, and MinIO containers.

@@ -38,6 +38,8 @@ services:
       - zookeeper
     ports:
       - "9092:9092"
+    volumes:
+      - ./data/kafka:/var/lib/kafka/data
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -62,15 +64,16 @@ services:
   # --- Storage (MinIO) ---
   minio:
     image: minio/minio
-    command: server /data --console-address ":9001"
-    environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
+    container_name: minio
     ports:
       - "9000:9000"
       - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
     volumes:
-      - ./data/minio_data:/data
+      - ./data/minio:/data
 
   # --- Spark Ecosystem ---
   spark-master:
@@ -102,7 +105,13 @@ services:
       - ./data:/opt/spark/data
 
   jupyter:
-    image: jupyter/pyspark-notebook
+    build: 
+      context: .
+      dockerfile: docker/Dockerfile.spark
+    # image: jupyter/pyspark-notebook
+    container_name: jupyter
+    user: root
+    command: tail -f /dev/null
     ports:
       - "8888:8888"
     environment:
@@ -112,6 +121,8 @@ services:
     volumes:
       - ./notebooks:/home/jovyan/work
       - ./apps:/home/jovyan/apps
+      - ./apps:/home/jovyan/data
+      - ./data/checkpoints:/home/jovyan/data/checkpoints
     depends_on:
       - spark-master
 
