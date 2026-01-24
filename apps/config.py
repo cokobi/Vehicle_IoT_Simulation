@@ -20,3 +20,6 @@ CARS_INVENTORY = 20
 DATA_GENERATOR_TOPIC = "sensors-sample"
 DATA_ENRICHMENT_TOPIC = "samples-enriched"
 ALERT_TOPIC = "alert-data"
+
+# 5. Path for saving dashboard data
+DASHBOARD_DATA_PATH = "/home/jovyan/apps/dashboard_data.csv"

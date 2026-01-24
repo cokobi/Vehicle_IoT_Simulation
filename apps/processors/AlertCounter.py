@@ -1,8 +1,9 @@
 import sys
 import os
+import pandas as pd
 from pyspark.sql.functions import col, from_json, window, count, max, sum, when
 
-# Path Definition
+# Path Definition to import local modules
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
@@ -11,55 +12,59 @@ import config
 import schema
 from spark_utils import get_spark_session
 
+# Use the path defined in config.py
+CSV_PATH = config.DASHBOARD_DATA_PATH
+
 def print_batch(df, epoch_id):
-    """
-    This function is triggered for every micro-batch.
-    It clears the console screen and prints the fresh DataFrame, 
-    creating a 'Dashboard' effect.
-    """
-    # ANSI escape code to clear the terminal screen (works in Docker/Linux)
-    # print("\033[H\033[J", end="") 
+    print(f"\n--- Global Alert Summary | Batch: {epoch_id} ---")
     
-    print(f"--- Alert Report | Batch: {epoch_id} ---")
-    
-    # Check if DataFrame is empty
-    row_count = df.count()
-    if row_count == 0:
+    if df.count() == 0:
         print("Waiting for data...")
-        print("Check list:")
-        print("  1. Is Producer running? (Terminal 4)")
-        print("  2. Is Detector running? (Terminal 2)")
         return
+
+    # 1. Convert Spark DataFrame to Pandas (Efficient for small aggregated data)
+    pdf = df.toPandas()
     
-    # Get the latest window only
-    latest_window_row = df.orderBy(col("window.start").desc()).limit(1)
+    if not pdf.empty:
+        # 2. Data Cleaning & Formatting
+        # Extract the 'start' time from the Spark window struct object
+        pdf['window_start'] = pdf['window'].apply(lambda x: x['start'])
+        pdf = pdf.drop(columns=['window'])
+        
+        # Reorder columns to put timestamp first
+        cols = ['window_start'] + [c for c in pdf.columns if c != 'window_start']
+        pdf = pdf[cols]
 
-    row = latest_window_row.first()
-    window_start = row["window"]["start"]
-    print(f"Window Time: {window_start}")
-    print("-" * 30)
+        # 3. Save to CSV (Appended for Streamlit to read)
+        # Write header only if file does not exist
+        header = not os.path.exists(CSV_PATH)
+        pdf.to_csv(CSV_PATH, mode='a', header=header, index=False)
+        print(f"Data saved to {CSV_PATH}")
 
-    clean_df = latest_window_row.select(
-                         "num_of_rows", 
-                         "num_of_black", 
-                         "num_of_white", 
-                         "num_of_silver",
-                         "maximum_speed", 
-                         "maximum_gear",
-                         "maximum_rpm"
-                         )
-
-    # Print the DataFrame to the console without truncating values
-    clean_df.show(truncate=False)
+        # 4. Console Output (Show only the latest window for clarity)
+        # Sort by time and pick the most recent one
+        latest_row = pdf.sort_values(by='window_start', ascending=False).iloc[0]
+        
+        print(f"Window Time: {latest_row['window_start']}")
+        print("-" * 30)
+        # Print as a nice horizontal table
+        print(latest_row.to_frame().T.to_string(index=False))
 
 def run_counter_service():
-    print("Starting Alert Counter Service (Console Output)...")
-    spark = get_spark_session("AlertCounterService")
+    print("Starting Global Alert Counter (Real-Time Dashboard Mode)...")
+    
+    # Clean up old dashboard data on startup
+    if os.path.exists(CSV_PATH):
+        try:
+            os.remove(CSV_PATH)
+            print("Deleted old dashboard data file.")
+        except OSError:
+            print("Could not delete old file, continuing...")
 
-    # Reduce log verbosity for cleaner console output
+    spark = get_spark_session("AlertCounterService")
     spark.sparkContext.setLogLevel("ERROR")
 
-    # Read Stream from 'alert-data' topic
+    # Read from Kafka
     alerts_stream = spark.readStream \
         .format("kafka") \
         .option("kafka.bootstrap.servers", "kafka:9092") \
@@ -67,23 +72,20 @@ def run_counter_service():
         .option("startingOffsets", "earliest") \
         .load()
 
-    # Parse JSON (Using Enriched Schema because the data structure hasn't changed)
+    # Parse JSON Data
     parsed_alerts = alerts_stream.select(
         from_json(col("value").cast("string"), schema.KAFKA_ENRICHED_SCHEMA).alias("data")
     ).select("data.*")
 
+    # Ensure event_time is a timestamp
     parsed_alerts = parsed_alerts.withColumn("event_time", col("event_time").cast("timestamp"))
 
-    # Aggregation Logic:
-    # Window: 10 minutes
-    # Metrics: Count Total, Count Colors, Max values
-
-    # set watermark to handle late data
+    # Aggregation Logic
+    # Using a short 1-minute window for a dynamic dashboard experience
     counts_df = parsed_alerts \
         .withWatermark("event_time", "30 seconds") \
         .groupBy(
-            window(col("event_time"), "10 minutes"),
-            # col("brand_name")
+            window(col("event_time"), "1 minute")
         ) \
         .agg(
             count("*").alias("num_of_rows"),
@@ -95,13 +97,12 @@ def run_counter_service():
             max("rpm").alias("maximum_rpm")
         )
     
-    # Write Stream (To Console)
-    print("--- Alerts Statistics from the Last 10 minutes: ---")
-
+    # Write Stream
+    # OutputMode 'update' allows us to see changes in real-time before the window closes
     query = counts_df \
         .writeStream \
-        .outputMode("append") \
-        .trigger(processingTime='10 minutes') \
+        .outputMode("update") \
+        .trigger(processingTime='1 seconds') \
         .foreachBatch(print_batch) \
         .start()
 
